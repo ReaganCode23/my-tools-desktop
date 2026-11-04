@@ -30,3 +30,6 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[features]
+updater-smoke = []

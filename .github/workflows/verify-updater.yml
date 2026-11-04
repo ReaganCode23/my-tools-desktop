@@ -1,0 +1,76 @@
+name: Verify signed update installation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  updater:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+      - run: npm ci
+      - run: npm run build:web
+      - name: Build isolated native updater test
+        run: cargo build --release --locked --features updater-smoke --manifest-path src-tauri/Cargo.toml
+      - name: Exercise Linux download, verification, install, and restart
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p test-update/expected
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern mytools-linux-x86_64.tar.gz --dir test-update
+          tar -xzf test-update/mytools-linux-x86_64.tar.gz -C test-update/expected
+          cp src-tauri/target/release/mytools test-update/mytools
+          export MYTOOLS_UPDATER_SMOKE=1
+          export MYTOOLS_SMOKE_RESULT="$PWD/test-update/result.json"
+          timeout 120s xvfb-run -a sh -c './test-update/mytools; sleep 3'
+          cat test-update/result.json
+          node -e "const r=require('./test-update/result.json'); if(r.status!=='verified-download')throw Error(JSON.stringify(r))"
+          cmp test-update/mytools test-update/expected/mytools
+          test -f test-update/mytools.previous
+          echo 'PASS: native signed download installed the exact published executable and preserved the previous binary.'
+      - name: Exercise Windows download, verification, and NSIS installation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:MYTOOLS_UPDATER_SMOKE = '1'
+          $env:MYTOOLS_SMOKE_RESULT = "$PWD/updater-result.json"
+          $p = Start-Process -FilePath src-tauri/target/release/mytools.exe -PassThru
+          if (-not $p.WaitForExit(120000)) { Stop-Process $p; throw 'Updater test timed out' }
+          if (-not (Test-Path updater-result.json)) { throw 'Updater never reached verification' }
+          $result = Get-Content updater-result.json | ConvertFrom-Json
+          if ($result.status -ne 'verified-download') { throw ($result | ConvertTo-Json) }
+          $candidates = @("$env:LOCALAPPDATA/MyTools/mytools.exe", "$env:LOCALAPPDATA/Programs/MyTools/mytools.exe")
+          $installed = $null
+          for ($i=0; $i -lt 30; $i++) {
+            $installed = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($installed) { break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $installed) { throw 'The update installer did not install MyTools' }
+          $version = (Get-Item $installed).VersionInfo.ProductVersion
+          if (-not $version.StartsWith($result.version)) { throw "Installed version $version does not match $($result.version)" }
+          Write-Host "PASS: native signature-verified update installed MyTools $version at $installed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: updater-proof-${{ runner.os }}
+          path: |
+            test-update/result.json
+            updater-result.json
