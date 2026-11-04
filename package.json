@@ -1,0 +1,6 @@
+{
+ "name":"mytools", "version":"1.0.0", "private":true, "description":"Your own compact, offline desktop toolkit.", "author":"ReaganCode23", "license":"MIT",
+ "repository":{"type":"git","url":"https://github.com/ReaganCode23/my-tools-desktop.git"},
+ "scripts":{"start":"tauri dev", "tauri":"tauri", "check":"node --check app/hub.js && node --check app/tools.js && node --test scripts/core.test.mjs", "build":"tauri build", "build:web":"node scripts/prepare.mjs"},
+ "devDependencies":{"@tauri-apps/cli":"2.12.4"}
+}

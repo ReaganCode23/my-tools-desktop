@@ -1,0 +1,1 @@
+{"identifier":"main","description":"Local toolkit window. Native commands expose only user-chosen files, clipboard, and signed app updates.","windows":["main"],"permissions":["core:default"]}

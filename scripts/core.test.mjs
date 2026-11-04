@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {webcrypto} from 'node:crypto';import {parsePages,makePassword,randomInt,safeFileName} from '../app/core.mjs';
+test('page ranges preserve requested order and remove duplicate pages',()=>{assert.deepEqual(parsePages('4-5, 1, 4, 2-3',5),[3,4,0,1,2]);});
+test('invalid page requests are rejected before writing a PDF',()=>{for(const input of ['','0','6','3-1','-1','2.5','1,,2','all','1-999999999'])assert.throws(()=>parsePages(input,5));});
+test('password contains every selected group at the requested length',()=>{for(let i=0;i<100;i++){const p=makePassword(24,['ABC','abc','234','!?'],webcrypto);assert.equal(p.length,24);for(const group of ['ABC','abc','234','!?'])assert([...p].some(c=>group.includes(c)));assert([...p].every(c=>'ABCabc234!?'.includes(c)));}});
+test('rejection sampling discards biased values',()=>{let calls=0;const source={getRandomValues(buffer){buffer[0]=calls++?7:0xffffffff;return buffer;}};assert.equal(randomInt(10,source),7);assert.equal(calls,2);});
+test('unsafe password settings rejected',()=>{assert.throws(()=>makePassword(7,['abc'],webcrypto));assert.throws(()=>makePassword(24,[],webcrypto));});
+test('filenames do not carry directories into exports',()=>{assert.equal(safeFileName('photo.jpg','-clean','png'),'photo-clean.png');assert(!safeFileName('../photo?.jpg','-clean','png').includes('/'));});
