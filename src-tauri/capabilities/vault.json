@@ -1,0 +1,1 @@
+{"identifier":"vault","description":"Dedicated native password-vault window. Secret commands also enforce the caller label in Rust.","windows":["vault"],"permissions":["core:default"]}

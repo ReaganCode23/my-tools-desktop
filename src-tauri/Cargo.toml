@@ -1,6 +1,6 @@
 [package]
 name = "mytools"
-version = "1.0.0"
+version = "1.1.0"
 description = "A compact, private desktop toolkit"
 authors = ["ReaganCode23"]
 license = "MIT"
@@ -23,6 +23,14 @@ base64 = "0.22"
 url = "2"
 flate2 = "1"
 tar = "0.4"
+argon2 = { version = "0.5.3", features = ["zeroize"] }
+aes-gcm = "0.10.3"
+aes = { version = "0.8", features = ["zeroize"] }
+zeroize = { version = "1.8", features = ["derive"] }
+rand = "0.8"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["time"] }
 
 [profile.release]
 codegen-units = 1
@@ -33,3 +41,4 @@ strip = true
 
 [features]
 updater-smoke = []
+vault-smoke = []

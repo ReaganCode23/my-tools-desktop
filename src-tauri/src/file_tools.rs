@@ -1,0 +1,7 @@
+use serde::Serialize;
+use sha2::{Digest,Sha256,Sha512};
+use std::io::Read;
+use tauri_plugin_dialog::DialogExt;
+use zeroize::Zeroizing;
+#[derive(Serialize)]pub struct HashResult{name:String,bytes:u64,algorithm:String,hash:String}
+#[tauri::command]pub async fn choose_hash_file(app:tauri::AppHandle,window:tauri::WebviewWindow,algorithm:String)->Result<Option<HashResult>,String>{if window.label()!="main"{return Err("Open File Check from MyTools".into());}if !["SHA-256","SHA-512"].contains(&algorithm.as_str()){return Err("Unsupported hash algorithm".into());}tauri::async_runtime::spawn_blocking(move||{let Some(file)=app.dialog().file().set_title("Choose a file to verify").blocking_pick_file()else{return Ok(None)};let path=file.into_path().map_err(|_|"Invalid file")?;let mut source=std::fs::File::open(&path).map_err(|_|"Could not open this file")?;let mut buffer=Zeroizing::new(vec![0;1024*1024]);let mut small=Sha256::new();let mut large=Sha512::new();let mut total=0;loop{let n=source.read(&mut buffer).map_err(|_|"Could not read this file")?;if n==0{break;}total+=n as u64;if algorithm=="SHA-256"{small.update(&buffer[..n]);}else{large.update(&buffer[..n]);}}let hash=if algorithm=="SHA-256"{format!("{:x}",small.finalize())}else{format!("{:x}",large.finalize())};Ok(Some(HashResult{name:path.file_name().unwrap_or_default().to_string_lossy().into_owned(),bytes:total,algorithm,hash}))}).await.map_err(|_|"File verification failed")?}

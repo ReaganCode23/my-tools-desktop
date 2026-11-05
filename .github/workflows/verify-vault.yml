@@ -1,0 +1,54 @@
+name: Verify encrypted vault on Windows and Linux
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vault:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:web
+      - run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo build --release --locked --features vault-smoke --manifest-path src-tauri/Cargo.toml
+      - name: Validate Linux vault commands
+        if: runner.os == 'Linux'
+        env:
+          MYTOOLS_VAULT_SMOKE: '1'
+          MYTOOLS_SMOKE_RESULT: vault-result.json
+        run: |
+          timeout 90s xvfb-run -a src-tauri/target/release/mytools
+          cat vault-result.json
+          node -e "if(require('./vault-result.json').status!=='passed')process.exit(1)"
+      - name: Validate Windows vault commands
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:MYTOOLS_VAULT_SMOKE = '1'
+          $env:MYTOOLS_SMOKE_RESULT = "$PWD/vault-result.json"
+          $p = Start-Process -FilePath src-tauri/target/release/mytools.exe -PassThru
+          if (-not $p.WaitForExit(90000)) { Stop-Process $p; throw 'Vault validation timed out' }
+          Get-Content vault-result.json
+          if ((Get-Content vault-result.json | ConvertFrom-Json).status -ne 'passed') { throw 'Vault validation failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vault-proof-${{ runner.os }}
+          path: vault-result.json
